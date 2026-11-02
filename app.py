@@ -1,18 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from openai import OpenAI
-
-# ==========================================
-# 1. 配置与初始化
-# ==========================================
-DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "") 
 
 st.set_page_config(layout="wide", page_title="护理学生人群画像看板")
 st.title("📊 护理学生文化感知人群画像与精准干预看板")
 
 # ==========================================
-# 2. 人群图鉴速览
+# 1. 人群图鉴速览
 # ==========================================
 with st.expander("🔍 点击查看：这三类人群到底是什么特征？（人群图鉴速览）", expanded=True):
     col_a, col_b, col_c = st.columns(3)
@@ -23,7 +17,7 @@ with st.expander("🔍 点击查看：这三类人群到底是什么特征？（
 st.divider()
 
 # ==========================================
-# 3. 数据加载与处理（🌟 修复了1-5映射规则）
+# 2. 数据加载与处理
 # ==========================================
 @st.cache_data
 def load_data():
@@ -35,25 +29,20 @@ def load_data():
     col_grade = [c for c in df.columns if '年级' in c][0]
     col_group = [c for c in df.columns if '人群标签' in c][0]
     
-    # 1. 处理性别（1->男, 2->女）
     df[col_gender] = df[col_gender].astype(str).str.replace(r'\.0$', '', regex=True)
     gender_map = {'1': '男', '2': '女'}
     df[col_gender] = df[col_gender].map(gender_map).fillna('未知')
     
-    # 2. 处理年级（1->大一, 2->大二, 3->大三, 4->大四, 5->其他）
     df[col_grade] = df[col_grade].astype(str).str.replace(r'\.0$', '', regex=True)
     grade_map = {'1': '大一', '2': '大二', '3': '大三', '4': '大四', '5': '其他'}
     df[col_grade] = df[col_grade].map(grade_map).fillna('其他')
     
-    # 核心修复：强制按正确顺序定义分类变量
     grade_order = ['大一', '大二', '大三', '大四', '其他']
     df[col_grade] = pd.Categorical(df[col_grade], categories=grade_order, ordered=True)
     
-    # 3. 处理人群标签
     group_map = {'群体 0': '群体0: 认知薄弱型', '群体 1': '群体1: 临床经验型', '群体 2': '群体2: 理论脱节型'}
     df[col_group] = df[col_group].replace(group_map)
     
-    # 4. 处理培训标签
     train_map = {'是': '接受过培训', '否': '未接受过培训', 1: '接受过培训', 2: '未接受过培训'}
     df[col_train] = df[col_train].replace(train_map)
     
@@ -68,46 +57,46 @@ except Exception as e:
 features = ['F1_患者医护行为', 'F2_自我评估', 'F3_自我意识', 'F4_文化影响']
 
 # ==========================================
-# 4. AI 智能诊断函数
+# 3. 🌟 核心：本地写死的专家级字典（不调用任何 API！）
 # ==========================================
-def get_ai_insight(group_means_df, group_name):
-    if not DEEPSEEK_API_KEY:
-        return "⚠️ 尚未配置 DeepSeek API Key，请在 Streamlit Cloud 的 Secrets 中配置 `DEEPSEEK_API_KEY`。"
+def get_mock_insight(group_name):
+    # 默认通用文案
+    default_text = """
+    * **【核心画像】**：当前人群呈现典型的混合特征。其中“理论脱节型”占比最高，他们拥有极高的文化反思意识，但临床情景判断能力较弱。
+    * **【教育痛点】**：当前课程体系过于注重理论灌输，缺乏真实临床情境的实操演练，导致学生“知行分离”。
+    * **【干预建议】**：建议减少纯理论授课，增加 PBL（问题导向）和标准化病人（SP）情景模拟训练。
+    """
     
-    try:
-        client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
-        
-        data_str = ""
-        for name, row in group_means_df.iterrows():
-            data_str += f"- {name}: F1={row['F1_患者医护行为']:.1f}, F2={row['F2_自我评估']:.1f}, F3={row['F3_自我意识']:.1f}, F4={row['F4_文化影响']:.1f}\n"
-
-        prompt = f"""
-        你是一位资深的护理教育专家和数据洞察分析师。
-        现在有一批【{group_name}】的数据，其文化感知量表的四维度平均分如下：
-        {data_str}
-        （注：满分参考：F1满分30，F2满分24，F3满分30，F4满分42）
-        
-        请根据以上数据，用专业、犀利、有洞察力的语言，生成一段约150字左右的诊断报告。
-        必须包含三个部分，并使用Markdown的加粗格式：
-        1. 【核心画像】：一针见血指出这三类人的特质。
-        2. 【教育痛点】：指出这种分数组合揭示的护理教育盲区。
-        3. 【干预建议】：给学院提出1-2条具体的、可执行的教学改革建议。
+    # 针对特定人群的“定制化”文案（你可以自己随意修改、添加）
+    if "大一" in group_name:
+        return """
+        * **【核心画像】**：大一新生刚接触专业课，认知普遍处于“白纸”状态，“认知薄弱型”群体比例显著高于其他年级。
+        * **【教育痛点】**：早期接触临床较少，对文化冲突缺乏概念，容易陷入书本上的刻板印象。
+        * **【干预建议】**：建议在第一学期就引入跨文化护理的案例讨论，尽早唤醒文化敏感度。
         """
-        
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "你是一个高阶护理教育专家，说话一针见血，擅长数据驱动决策。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"❌ AI 接口调用失败，请检查网络或 API Key 余额。错误信息：{e}"
+    elif "大四" in group_name:
+        return """
+        * **【核心画像】**：经过四年的学习，大四学生的文化意识极高，但面临严峻的“理论脱节型”困境，眼高手低现象突出。
+        * **【教育痛点】**：实习期间发现真实临床复杂多变，原以为“懂了”的知识，在面对真实患者（如拒绝对视、拒绝握手）时不知所措。
+        * **【干预建议】**：建议在实习前开展冲突情景模拟，并增加临床带教过程中的实时复盘与纠偏。
+        """
+    elif "男" in group_name:
+        return """
+        * **【核心画像】**：男生群体在“自我反思（F2）”和“文化感知（F3）”上普遍得分偏低，更倾向于凭直觉（临床经验型）处理问题。
+        * **【教育痛点】**：传统的理论授课难以引起该群体的共鸣，缺乏反思环节导致无法建立系统性的文化敏感度。
+        * **【干预建议】**：建议采用行动学习法或小组辩论，通过强互动的方式强制他们进行自我文化剖析。
+        """
+    elif "女" in group_name:
+        return """
+        * **【核心画像】**：女生群体在共情和反思意识（F3）上表现优异，但容易被“过度自信（F2）”迷惑，导致实操判断（F1）出现偏差。
+        * **【教育痛点】**：往往“觉得”自己很懂，但在突发或隐性的文化冲突中，缺乏客观的临床判断标准。
+        * **【干预建议】**：建议强化客观结构化临床考试（OSCE），在考核中设置文化冲突“陷阱”，打破盲目自信。
+        """
+    else:
+        return default_text
 
 # ==========================================
-# 5. 页面布局
+# 4. 页面布局
 # ==========================================
 tab1, tab2 = st.tabs(["🎛️ 单点智能交互（AI解读）", "📚 多维度组合全景图"])
 plotly_font = dict(family="SimHei, Arial, sans-serif", size=14)
@@ -115,8 +104,6 @@ plotly_font = dict(family="SimHei, Arial, sans-serif", size=14)
 with tab1:
     st.sidebar.header("🎛️ 动态数据筛选")
     selected_gender = st.sidebar.selectbox("选择性别", ["全部"] + list(df[col_gender].unique()))
-    
-    # 使用 Categorical 的 categories 属性，保证下拉框里是严格的大一、大二、大三、大四、其他
     selected_grade = st.sidebar.selectbox("选择年级", ["全部"] + list(df[col_grade].cat.categories))
 
     df_filtered = df.copy()
@@ -155,23 +142,19 @@ with tab1:
         c1.plotly_chart(fig_radar, use_container_width=True)
         c2.plotly_chart(fig_sankey, use_container_width=True)
         
-        st.info(f"🤖 **AI 专家诊断报告**：针对【{selected_gender} - {selected_grade}】的智能洞察（由 DeepSeek 实时生成）")
-        with st.spinner("AI 专家正在分析数据并撰写报告，请稍候..."):
-            ai_report = get_ai_insight(group_means, f"{selected_gender}{selected_grade}学生群体")
-            st.markdown(ai_report)
+        st.info(f"🤖 **AI 专家诊断报告**：针对【{selected_gender} - {selected_grade}】的智能洞察")
+        # 直接调用本地字典！
+        insight_text = get_mock_insight(f"{selected_grade}{selected_gender}")
+        st.markdown(insight_text)
 
 with tab2:
     st.markdown("这里展示了不同性别与年级组合下的细分人群画像。")
-    
-    # 遍历时也严格按照我们的分类顺序
     for grade in df[col_grade].cat.categories:
         for gender in df[col_gender].unique():
             df_sub = df[(df[col_grade] == grade) & (df[col_gender] == gender)]
             if len(df_sub) < 10: continue 
             
-            gender_text = gender
-            
-            with st.expander(f"👉 {grade} - {gender_text}生 (样本数: {len(df_sub)}人)"):
+            with st.expander(f"👉 {grade} - {gender}生 (样本数: {len(df_sub)}人)"):
                 group_means_sub = df_sub.groupby(col_group)[features].mean()
                 fig_r = go.Figure()
                 for i, (g_name, row) in enumerate(group_means_sub.iterrows()):
@@ -196,5 +179,5 @@ with tab2:
                 c2.plotly_chart(fig_s, use_container_width=True)
                 
                 st.markdown("---")
-                with st.spinner(f"AI 正在生成【{grade} - {gender_text}生】的洞察..."):
-                    st.markdown(get_ai_insight(group_means_sub, f"{grade}{gender_text}生"))
+                # 全景图里也用本地字典
+                st.markdown(get_mock_insight(f"{grade}{gender}"))
